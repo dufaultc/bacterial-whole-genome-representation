@@ -24,23 +24,24 @@ if not os.path.exists(genomes_folder):
     os.makedirs(genomes_folder)
 
 # Download metadata for all assemblies in source databse
-cmd = f"datasets summary genome taxon bacteria \
---annotated \
---report 'genome' \
---exclude-atypical \
---assembly-source {assembly_source} \
---assembly-level {assembly_level} \
-> {metadata_file}"
-output_dir = os.path.join(get_project_root())
-subprocess.call(cmd, cwd=output_dir, shell=True)
+# 2 is bacteria taxid
+# cmd = f"datasets summary genome taxon 2 \
+# --annotated \
+# --report 'genome' \
+# --exclude-atypical \
+# --assembly-source {assembly_source} \
+# --assembly-level {assembly_level} \
+# > {metadata_file}"
+# output_dir = os.path.join(get_project_root())
+# subprocess.call(cmd, cwd=output_dir, shell=True)
 
 
-f = open(os.path.join(get_project_root(), "data", metadata_file))
-data = json.load(f)
+# f = open(os.path.join(get_project_root(), "data", metadata_file))
+# data = json.load(f)
 
-df = pd.DataFrame([x["accession"] for x in data["reports"]])
-df.set_index(0, inplace=True)
-df.to_csv(accession_list_file, header=False)
+# df = pd.DataFrame([x["accession"] for x in data["reports"]])
+# df.set_index(0, inplace=True)
+# df.to_csv(accession_list_file, header=False)
 
 
 cmd = f"datasets download genome accession \
