@@ -12,9 +12,27 @@ from concurrent.futures import ProcessPoolExecutor
 import ast
 import gc
 
+"""
+This file goes through genome assemblies downloaded earlier
+ and "converts" them to sequences of genomic elements. 
+ Requires the results of the protein domain search performed earlier.
+ Each genome assembly file is opened and  elements added to the growing sequence
+ in the order they appears. For each protein encountered, domains are looked up
+ in the proteins_dict created in the previous step. 
+
+ The genomic element sequences consist of:
+    - Pfam domains. Tokens are just the domain names. 
+    - tRNA. Tokens indicate the type (e.x. tRNA-thr)
+    - For other non-coding RNA (rRNA, tmRNA, etc.), if an Rfam families is available it is added, otherwise nothing added.
+    - Pseudogenes. Token is just "pseudogene"
+    - Named repeats if come across. Mostly just "CRISPR".
+    - "Punctuation" tokens. contig_start added when each new contig found, 
+    protein_start and protein_end added for each coding gene found.
+    - Strand tokens "+" and "-" are added when next genomic element is on opposite strand of the previous one.
+"""
 
 # SET THESE EACH RUN AS NEEDED
-download_date = "april_22"
+download_date = "april_28"
 assembly_source = "RefSeq"
 
 run_name = f"{assembly_source}_{download_date}"
@@ -39,6 +57,7 @@ folders_list = [
     if os.path.isdir(os.path.join(genomes_folder, "ncbi_dataset", "data", accession))
 ]
 
+# Saving the metadata in a separate df
 meta_f = open(metadata_file, "r")
 data = json.load(meta_f)
 df = pd.DataFrame([x for x in data["reports"] if x["accession"] in folders_list])
@@ -46,7 +65,7 @@ df.set_index("accession", inplace=True)
 df.sort_index(inplace=True)
 df.to_csv(os.path.join(tokenized_folder, f"metadata_df_{run_name}.csv"), header=True)
 
-
+# We created these last step, we use them to map proteins we encounter to domains
 with open(os.path.join(proteins_folder, "accessions_dictionary.pkl"), "rb") as f:
     accessions_dictionary = pickle.load(f)
 with open(os.path.join(proteins_folder, "query_dictionary.pkl"), "rb") as f:
@@ -63,7 +82,7 @@ print(datetime.datetime.now())
 tokenized_file = os.path.join(tokenized_folder, f"tokenized_{run_name}.txt")
 accessions_order_file = os.path.join(
     tokenized_folder, f"accessions_order_{run_name}.txt"
-)
+)  # Ass we put the tokenized genomes in tokenized_file, we keep track of the accessions added in this file so we dont lose track of their order
 
 
 out_tokenized = open(tokenized_file, "w")
@@ -72,9 +91,10 @@ out_accessions_order = open(accessions_order_file, "w")
 out_accessions_order.close()
 
 
-def tokenize_gff(folder):
+# Tokenizes each accession
+def tokenize_gff(accession):
     in_gff = os.path.join(
-        genomes_folder, "ncbi_dataset", "data", folder, f"genomic.gff.gz"
+        genomes_folder, "ncbi_dataset", "data", accession, f"genomic.gff.gz"
     )
     tokens = []
     last_strand = "+"
@@ -82,14 +102,15 @@ def tokenize_gff(folder):
     starts = defaultdict(dict)
     with gzip.open(in_gff, "rt") as gff_f:
         for line in gff_f:
-            if line[0] == "#":
+            if line[0] == "#":  # Skip the comment lines
                 continue
-            features = line.split("\t")
+
+            features = line.split("\t")  # Information in the gff files is tab separated
             attributes = {
                 feature.split("=")[0]: feature.split("=")[1]
                 for feature in features[8].rstrip().split(";")
                 if "=" in feature
-            }
+            }  #
             if features[2] == "region":
                 tokens.append("contig_start")
                 continue
@@ -102,7 +123,6 @@ def tokenize_gff(folder):
             if features[2] == "CDS":
                 if "pseudo" in attributes.keys():
                     if attributes["pseudo"] == "true":
-                        # tokens.append("pseudogene")
                         continue
                 else:
                     tokens.append("protein_start")
@@ -151,17 +171,17 @@ def tokenize_gff(folder):
                         token = token[:12]
                         tokens.append(token)
                     else:
-                        print(features[2], features[0], folder)
+                        print(features[2], features[0], accession)
                 except:
-                    print(features[2], features[0], folder)
+                    print(features[2], features[0], accession)
             elif features[2] == "sequence_feature":
                 try:
                     tokens.append(attributes["Dbxref"])
                 except:
                     tokens.append("misc")
             else:
-                print(features[2], features[0], folder)
-    return " ".join(tokens), folder
+                print(features[2], features[0], accession)
+    return " ".join(tokens), accession
 
 
 cumsum = 0
