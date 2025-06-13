@@ -16,7 +16,7 @@ Current main things missing are:
 
 ## Creating environment
 
-* `conda create -n "bacterial_env" python=3.9` activate
+* `conda create -n "bacterial_env" python=3.12.2` activate
 * `pip install -e .`
 * `conda install -c conda-forge ncbi-datasets-cli`
 * `conda install conda-forge::biopython`

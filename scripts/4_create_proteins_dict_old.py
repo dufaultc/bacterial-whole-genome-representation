@@ -9,7 +9,6 @@ from concurrent.futures import ProcessPoolExecutor
 import json
 import pyhmmer
 import sys
-import re
 
 print(sys.argv[1])
 with open(sys.argv[1]) as f:
@@ -29,12 +28,17 @@ num_protein_files = args_dict[
     "num_protein_files"
 ]  # We split the proteins to be searched for domains into separate files to ease memory issues
 
-reuse_annotations_from = args_dict.get("reuse_annotations_from", None)
-shrink_hmmer_output = args_dict.get("shrink_hmmer_output", "False")
-
-domain_score_filter = args_dict.get("domain_score_filter", None)
-e_value_filter = args_dict.get("e_value_filter", None)
-filter_by_gathering_threshold = args_dict.get("filter_by_gathering_threshold", "False")
+filter_by_domain_score = args_dict["filter_by_domain_score"]
+if filter_by_domain_score == "True":
+    domain_score_filter = args_dict["domain_score_filter"]
+else:
+    domain_score_filter = None
+filter_by_e_value = args_dict["filter_by_e_value"]
+if filter_by_e_value == "True":
+    e_value_filter = args_dict["e_value_filter"]
+else:
+    e_value_filter = None
+filter_by_gathering_threshold = args_dict["filter_by_gathering_threshold"]
 
 run_name = f"{assembly_source}_{download_date}"
 download_folder = os.path.join(get_project_root(), "data", run_name)
@@ -78,7 +82,7 @@ if e_value_filter is None:
         # "hmm_to",
         # "ali_from",
         # "ali_to",
-        "env_from",  # roughly where the domain found in the protein
+        "env_from",  # roughly where the domain found to begin in the protein
         "env_to",
         # "acc",
         # "description"
@@ -95,31 +99,8 @@ else:
 
 domtbl_files = []
 for i in range(num_protein_files):
-    f = os.path.join(
-        proteins_folder,
-        (
-            f"proteins_{i}_small.domtbl"
-            if shrink_hmmer_output == "True"
-            else f"proteins_{i}.domtbl"
-        ),
-    )
+    f = os.path.join(proteins_folder, f"proteins_{i}.domtbl")
     domtbl_files.append(f)
-if reuse_annotations_from is not None:
-    if shrink_hmmer_output == "True":
-        pattern = re.compile(r"^proteins_\d+\_small.domtbl$")
-    else:
-        pattern = re.compile(r"^proteins_\d+\.domtbl$")
-    existing_files_path = os.path.join(
-        get_project_root(), "data", reuse_annotations_from, "unique_proteins"
-    )
-    existing_annotation_files = [
-        os.path.join(existing_files_path, file)
-        for file in os.listdir(existing_files_path)
-        if pattern.match(file)
-    ]
-    for file in existing_annotation_files:
-        f = os.path.join(existing_files_path, file)
-        domtbl_files.append(f)
 
 
 df = pd.DataFrame(columns=col_names)
@@ -130,26 +111,37 @@ if "domain_i_evalue" in col_names:
     df["domain_i_evalue"] = df["domain_i_evalue"].astype(float)
 
 
+### ChatGPT helped make the below lines faster
 def process_file(hits_file):
     hits = pd.read_csv(
         hits_file,
-        sep=" ",
+        delim_whitespace=True,
+        comment="#",
         header=None,
         usecols=(
-            [0, 3, 13, 19, 20] if e_value_filter is not None else [0, 3, 12, 13, 19, 20]
+            [0, 3, 13, 19, 20]
+            if filter_by_e_value == "False"
+            else [0, 3, 12, 13, 19, 20]
         ),
         names=col_names,
     )
     hits["domain_score"] = hits["domain_score"].astype(float)
-    print(hits.shape)
-    gathering_threshold_series = hits["query_name"].map(cutoffs_dict)
-    hits = hits[hits["domain_score"] >= gathering_threshold_series]
-    # hits = hits[
-    #    hits.apply(lambda x: x["domain_score"] >= cutoffs_dict[x["query_name"]], axis=1)
-    # ]
-    print(hits.shape)
-    # hits = hits.drop("domain_i_evalue", axis=1)
-    return hits
+
+    if e_value_filter is not None:
+        hits["domain_i_evalue"] = hits["domain_i_evalue"].astype(float)
+        return hits[
+            hits.apply(lambda x: x["domain_i_evalue"] >= e_value_filter, axis=1)
+        ]
+    elif domain_score_filter is not None:
+        return hits[
+            hits.apply(lambda x: x["domain_score"] >= domain_score_filter, axis=1)
+        ]
+    elif filter_by_gathering_threshold == "True":
+        gathering_threshold_series = hits["query_name"].map(cutoffs_dict)
+        hits = hits[hits["domain_score"] >= gathering_threshold_series]
+        return hits
+    else:
+        return hits
 
 
 # Filter hits files and create df of domains hits

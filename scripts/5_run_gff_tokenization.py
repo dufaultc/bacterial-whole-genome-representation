@@ -32,8 +32,10 @@ This file goes through genome assemblies downloaded earlier
 """
 
 # SET THESE EACH RUN AS NEEDED
-download_date = "april_28"
+download_date = "may_13"
 assembly_source = "RefSeq"
+num_processes = 2
+
 
 run_name = f"{assembly_source}_{download_date}"
 genomes_folder = os.path.join(get_project_root(), "data", run_name)
@@ -186,7 +188,7 @@ def tokenize_gff(accession):
 
 cumsum = 0
 for start in tqdm.tqdm(range(0, len(folders_list), 1000)):
-    with ProcessPoolExecutor(max_workers=2) as executor:
+    with ProcessPoolExecutor(max_workers=num_processes) as executor:
         futures = [
             executor.submit(tokenize_gff, folder)
             for folder in tqdm.tqdm(

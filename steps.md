@@ -1,12 +1,12 @@
 ## Creating environment
 
-* `conda create -n "bacterial_env" python=3.9` activate
+* `conda create -n "bacterial_env" python=3.12.2` activate
 * `pip install -e .`
 * `conda install -c conda-forge ncbi-datasets-cli`
 * `conda install conda-forge::biopython`
 * `conda install anaconda::pandas`
 * `conda install conda-forge::tqdm`
-* `pip install pyhmmer=0.11.0`
+* `pip install pyhmmer==0.11.1`
 * `conda install bioconda::taxopy`
 
 # Building dataset

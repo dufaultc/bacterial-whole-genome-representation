@@ -1,0 +1,20 @@
+{
+    "data_path": "/home/cameron/bacterial-whole-genome-representation/data",
+    "download_date": "june_11_2025_all",
+    "assembly_level": "complete,chromosome,scaffold,contig",
+    "assembly_source": "RefSeq",
+    "no_limit": "True",
+    "limit": 1000,
+    "reuse_annotations_from": "RefSeq_all_aug_12",
+    "num_protein_files": 4,
+    "num_hmmer_processes": 4,
+    "num_cores_per_hmmer_process": 24,
+    "block_size_hmmer": 1000000,
+    "shrink_hmmer_output": "True",
+    "num_tokenization_processes": 2,
+    "filter_by_domain_score": "True",
+    "filter_by_e_value": "False",
+    "domain_score_filter": 10,
+    "e_value_filter": 0.01,
+    "domain_boundaries": "envelope"
+}
