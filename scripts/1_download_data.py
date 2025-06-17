@@ -10,7 +10,7 @@ with open(sys.argv[1]) as f:
     args_dict = json.load(f)
 
 # SET THESE EACH RUN AS NEEDED
-download_date = args_dict["download_date"]
+run_name = args_dict["run_name"]
 assembly_level = args_dict["assembly_level"]
 assembly_source = args_dict[
     "assembly_source"
@@ -22,7 +22,6 @@ if no_limit == "False":
 else:
     limit = None
 
-run_name = f"{assembly_source}_{download_date}"
 download_folder = os.path.join(
     get_project_root(), "data", run_name
 )  # The folder where our data will go

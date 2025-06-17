@@ -16,7 +16,7 @@ with open(sys.argv[1]) as f:
 
 
 # SET THESE EACH RUN AS NEEDED
-download_date = args_dict["download_date"]
+run_name = args_dict["run_name"]
 assembly_source = args_dict[
     "assembly_source"
 ]  # Where we will get the data from, can be RefSeq or GenBank
@@ -26,7 +26,6 @@ num_protein_files = args_dict[
 
 reuse_annotations_from = args_dict.get("reuse_annotations_from", None)
 
-run_name = f"{assembly_source}_{download_date}"
 download_folder = os.path.join(get_project_root(), "data", run_name)
 
 # Making a folder where our protein files will go, and creating the files

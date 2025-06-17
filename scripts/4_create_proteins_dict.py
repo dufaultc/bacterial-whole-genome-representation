@@ -10,6 +10,7 @@ import json
 import pyhmmer
 import sys
 import re
+import math
 
 print(sys.argv[1])
 with open(sys.argv[1]) as f:
@@ -21,7 +22,8 @@ with open(sys.argv[1]) as f:
 # Im sure there is a better way to do this but this has worked.
 
 # SET THESE EACH RUN AS NEEDED
-download_date = args_dict["download_date"]
+num_chunks = 20
+run_name = args_dict["run_name"]
 assembly_source = args_dict[
     "assembly_source"
 ]  # Where we will get the data from, can be RefSeq or GenBank
@@ -36,7 +38,6 @@ domain_score_filter = args_dict.get("domain_score_filter", None)
 e_value_filter = args_dict.get("e_value_filter", None)
 filter_by_gathering_threshold = args_dict.get("filter_by_gathering_threshold", "False")
 
-run_name = f"{assembly_source}_{download_date}"
 download_folder = os.path.join(get_project_root(), "data", run_name)
 proteins_folder = os.path.join(download_folder, "unique_proteins")
 
@@ -121,13 +122,8 @@ if reuse_annotations_from is not None:
         f = os.path.join(existing_files_path, file)
         domtbl_files.append(f)
 
-
 df = pd.DataFrame(columns=col_names)
 df["domain_score"] = df["domain_score"].astype(float)
-df["env_from"] = df["env_from"].astype(int)
-df["env_to"] = df["env_to"].astype(int)
-if "domain_i_evalue" in col_names:
-    df["domain_i_evalue"] = df["domain_i_evalue"].astype(float)
 
 
 def process_file(hits_file):
@@ -135,21 +131,26 @@ def process_file(hits_file):
         hits_file,
         sep=" ",
         header=None,
-        usecols=(
-            [0, 3, 13, 19, 20] if e_value_filter is not None else [0, 3, 12, 13, 19, 20]
-        ),
+        usecols=([0, 1, 3, 4, 5] if e_value_filter is None else [0, 1, 2, 3, 4, 5]),
         names=col_names,
     )
     hits["domain_score"] = hits["domain_score"].astype(float)
-    print(hits.shape)
-    gathering_threshold_series = hits["query_name"].map(cutoffs_dict)
-    hits = hits[hits["domain_score"] >= gathering_threshold_series]
-    # hits = hits[
-    #    hits.apply(lambda x: x["domain_score"] >= cutoffs_dict[x["query_name"]], axis=1)
-    # ]
-    print(hits.shape)
-    # hits = hits.drop("domain_i_evalue", axis=1)
-    return hits
+
+    if e_value_filter is not None:
+        hits["domain_i_evalue"] = hits["domain_i_evalue"].astype(float)
+        return hits[
+            hits.apply(lambda x: x["domain_i_evalue"] >= e_value_filter, axis=1)
+        ]
+    elif domain_score_filter is not None:
+        return hits[
+            hits.apply(lambda x: x["domain_score"] >= domain_score_filter, axis=1)
+        ]
+    elif filter_by_gathering_threshold == "True":
+        gathering_threshold_series = hits["query_name"].map(cutoffs_dict)
+        hits = hits[hits["domain_score"] >= gathering_threshold_series]
+        return hits
+    else:
+        return hits
 
 
 # Filter hits files and create df of domains hits
@@ -166,21 +167,13 @@ gc.collect()
 print("df created")
 
 df["domain_score"] = df["domain_score"].astype(float)
-df["env_from"] = df["env_from"].astype(int)
-df["env_to"] = df["env_to"].astype(int)
-
 
 # Need to sort for later adding the domains in correct order during gff tokenization
 df.set_index("target_name", inplace=True)
-df.sort_values(["target_name", "domain_score"], ascending=[True, False], inplace=True)
 
-print("df sorted")
-
-# Changing the protein and query names to integers saves memory
-# we save the actual names in separate accessions_dict and query_dict dictionaries so we can map them back later.
-# Yes i know this code is bad I apologize
 accessions_list = list(set(df.index))
 accession_dict = {accessions_list[i]: i for i in range(len(accessions_list))}
+max_len = len(accessions_list)
 del accessions_list
 df.index = df.index.map(accession_dict)
 
@@ -189,6 +182,9 @@ query_dict = {query_list[i]: i for i in range(len(query_list))}
 del query_list
 df["query_name"] = df["query_name"].map(query_dict)
 
+
+# Changing the protein and query names to integers saves memory
+# we save the actual names in separate accessions_dict and query_dict dictionaries so we can map them back later.
 print("accession and query converted to int")
 
 with open(os.path.join(proteins_folder, "accessions_dictionary.pkl"), "wb") as f:
@@ -201,9 +197,24 @@ del query_dict
 
 print("dicts dumped")
 
-# Combining the hits for each protein to a single row, with information separated in each column by spaces. Saves memory
-df = df.groupby(df.index).agg(lambda x: " ".join([str(y) for y in x.values.tolist()]))
 
+def groupby_chunk(chunk_df):
+    chunk_df.sort_values(
+        ["target_name", "domain_score"], ascending=[True, False], inplace=True
+    )
+    return chunk_df.groupby(chunk_df.index).agg(
+        lambda x: " ".join(
+            [str(y) for y in x.values.tolist()]
+        )  # Combining the hits for each protein to a single row, with information separated in each column by spaces. Saves memory
+    )
+
+
+step = math.ceil(max_len / num_chunks)
+start_ends = [(i, min(i + step, max_len)) for i in range(0, max_len, step)]
+chunks = [df[(df.index >= start) & (df.index < end)] for start, end in start_ends]
+with ProcessPoolExecutor(max_workers=num_chunks) as executor:
+    results = list(executor.map(groupby_chunk, chunks))
+df = pd.concat(results)
 print("df grouped")
 
 df = df.to_dict("index")
@@ -216,3 +227,7 @@ print("df converted to dict")
 
 with open(os.path.join(proteins_folder, "str_proteins_dict.pkl"), "wb") as f:
     pickle.dump(df, f)
+
+end_time = datetime.datetime.now()
+print(start_time)
+print(end_time)

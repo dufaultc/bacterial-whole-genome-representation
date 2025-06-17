@@ -14,7 +14,7 @@ with open(sys.argv[1]) as f:
     args_dict = json.load(f)
 
 # SET THESE EACH RUN AS NEEDED
-download_date = args_dict["download_date"]
+run_name = args_dict["run_name"]
 assembly_source = args_dict[
     "assembly_source"
 ]  # Where we will get the data from, can be RefSeq or GenBank
@@ -29,7 +29,6 @@ shrink_hmmer_output = args_dict["shrink_hmmer_output"]
 pfam_hmm = os.path.join(
     get_project_root(), "data", "Pfam-A.hmm"
 )  # Need to have Pfam hmms downloaded and placed here
-run_name = f"{assembly_source}_{download_date}"
 download_folder = os.path.join(get_project_root(), "data", run_name)
 proteins_folder = os.path.join(download_folder, "unique_proteins")
 

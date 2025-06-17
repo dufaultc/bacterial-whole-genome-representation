@@ -11,6 +11,7 @@ import pickle
 from concurrent.futures import ProcessPoolExecutor
 import ast
 import gc
+import sys
 
 """
 This file goes through genome assemblies downloaded earlier
@@ -31,17 +32,24 @@ This file goes through genome assemblies downloaded earlier
     - Strand tokens "+" and "-" are added when next genomic element is on opposite strand of the previous one.
 """
 
+print(sys.argv[1])
+with open(sys.argv[1]) as f:
+    args_dict = json.load(f)
+
 # SET THESE EACH RUN AS NEEDED
-download_date = "may_13"
-assembly_source = "RefSeq"
-num_processes = 2
+run_name = args_dict["run_name"]
+assembly_source = args_dict[
+    "assembly_source"
+]  # Where we will get the data from, can be RefSeq or GenBank
+num_tokenization_processes = args_dict["num_tokenization_processes"]
 
+allow_all_overlap = args_dict.get("allow_all_overlap", "False")
+overlap_window = args_dict.get("overlap_window", 0)
 
-run_name = f"{assembly_source}_{download_date}"
-genomes_folder = os.path.join(get_project_root(), "data", run_name)
-proteins_folder = os.path.join(genomes_folder, "unique_proteins")
-tokenized_folder = os.path.join(genomes_folder, "tokenized")
-metadata_file = os.path.join(genomes_folder, f"{run_name}_metadata.json")
+download_folder = os.path.join(get_project_root(), "data", run_name)
+proteins_folder = os.path.join(download_folder, "unique_proteins")
+tokenized_folder = os.path.join(download_folder, "tokenized")
+metadata_file = os.path.join(download_folder, f"{run_name}_metadata.json")
 
 
 if not os.path.exists(tokenized_folder):
@@ -54,9 +62,9 @@ print(start_time)
 folders_list = [
     accession
     for accession in sorted(
-        os.listdir(os.path.join(genomes_folder, "ncbi_dataset", "data"))
+        os.listdir(os.path.join(download_folder, "ncbi_dataset", "data"))
     )
-    if os.path.isdir(os.path.join(genomes_folder, "ncbi_dataset", "data", accession))
+    if os.path.isdir(os.path.join(download_folder, "ncbi_dataset", "data", accession))
 ]
 
 # Saving the metadata in a separate df
@@ -84,7 +92,7 @@ print(datetime.datetime.now())
 tokenized_file = os.path.join(tokenized_folder, f"tokenized_{run_name}.txt")
 accessions_order_file = os.path.join(
     tokenized_folder, f"accessions_order_{run_name}.txt"
-)  # Ass we put the tokenized genomes in tokenized_file, we keep track of the accessions added in this file so we dont lose track of their order
+)  # As we put the tokenized genomes in tokenized_file, we keep track of the accessions added in this file so we dont lose track of their order
 
 
 out_tokenized = open(tokenized_file, "w")
@@ -96,7 +104,7 @@ out_accessions_order.close()
 # Tokenizes each accession
 def tokenize_gff(accession):
     in_gff = os.path.join(
-        genomes_folder, "ncbi_dataset", "data", accession, f"genomic.gff.gz"
+        download_folder, "ncbi_dataset", "data", accession, f"genomic.gff.gz"
     )
     tokens = []
     last_strand = "+"
@@ -106,7 +114,6 @@ def tokenize_gff(accession):
         for line in gff_f:
             if line[0] == "#":  # Skip the comment lines
                 continue
-
             features = line.split("\t")  # Information in the gff files is tab separated
             attributes = {
                 feature.split("=")[0]: feature.split("=")[1]
@@ -135,20 +142,25 @@ def tokenize_gff(accession):
                     except:
                         tokens.append("protein_end")
                         continue
-                    for i in range(len(doms[0].split())):
-                        r = set(
-                            range(
-                                int(doms[2].split()[i]),  # env_from
-                                int(doms[3].split()[i]),  # env_to
+                    if not allow_all_overlap == "True":
+                        for i in range(len(doms[0].split())):
+                            r = set(
+                                range(
+                                    int(doms[2].split()[i])
+                                    + overlap_window,  # env_from
+                                    int(doms[3].split()[i]) - overlap_window,  # env_to
+                                )
                             )
-                        )
-                        if not ranges[attributes["Name"]].intersection(r):
-                            ranges[attributes["Name"]].update(r)
-                            starts[attributes["Name"]][int(doms[2].split()[i])] = (
-                                query_dictionary[int(doms[0].split()[i])]
-                            )
-                    for x in sorted(list(starts[attributes["Name"]].keys())):
-                        tokens.append(starts[attributes["Name"]][x])
+                            if not ranges[attributes["Name"]].intersection(r):
+                                ranges[attributes["Name"]].update(r)
+                                starts[attributes["Name"]][int(doms[2].split()[i])] = (
+                                    query_dictionary[int(doms[0].split()[i])]
+                                )
+                        for x in sorted(list(starts[attributes["Name"]].keys())):
+                            tokens.append(starts[attributes["Name"]][x])
+                    else:
+                        for i in doms[0].split():
+                            tokens.append(query_dictionary[int(i)])
                     tokens.append("protein_end")
             elif features[2] == "pseudogene":
                 tokens.append("pseudogene")
@@ -157,15 +169,15 @@ def tokenize_gff(accession):
             elif features[2] == "direct_repeat":
                 tokens.append(attributes["rpt_family"])
             elif features[2] in [
-                "riboswitch",
+                "riboswitch",  #
                 "tmRNA",
                 "RNase_P_RNA",
                 "SRP_RNA",
-                "binding_site",
+                "binding_site",  #
                 "rRNA",
                 "ncRNA",
-                "antisense_RNA",
-                "hammerhead_ribozyme",
+                "antisense_RNA",  #
+                "hammerhead_ribozyme",  #
             ]:
                 try:
                     token = attributes["Dbxref"]
@@ -176,11 +188,11 @@ def tokenize_gff(accession):
                         print(features[2], features[0], accession)
                 except:
                     print(features[2], features[0], accession)
-            elif features[2] == "sequence_feature":
+            elif features[2] == "sequence_feature":  #
                 try:
-                    tokens.append(attributes["Dbxref"])
+                    tokens.append(attributes["Dbxref"])  #
                 except:
-                    tokens.append("misc")
+                    tokens.append("misc")  #
             else:
                 print(features[2], features[0], accession)
     return " ".join(tokens), accession
@@ -188,7 +200,7 @@ def tokenize_gff(accession):
 
 cumsum = 0
 for start in tqdm.tqdm(range(0, len(folders_list), 1000)):
-    with ProcessPoolExecutor(max_workers=num_processes) as executor:
+    with ProcessPoolExecutor(max_workers=num_tokenization_processes) as executor:
         futures = [
             executor.submit(tokenize_gff, folder)
             for folder in tqdm.tqdm(

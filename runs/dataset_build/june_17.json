@@ -1,0 +1,36 @@
+{
+    "download_run_name": "RefSeq_june_9_2025_10000",
+    "dataset_name": "june_17_test",
+    "validation_split_level": "genus",
+    "validation_split_ratio": 0.05,
+    "test_split_levels": [
+        "genus",
+        "species",
+        "none"
+    ],
+    "test_split_ratios": [
+        0.05,
+        0.05,
+        0.05
+    ],
+    "unique_level": "species",
+    "same_rank_allowed_amount_val": 10,
+    "do_ani_data_filtering": "True",
+    "ani_filter_keep_type_assemblies": "True",
+    "ani_filter_keep_if_less_than_x_examples": 10,
+    "ani_filter_max": 99.5,
+    "ani_filter_coverage_max": 95,
+    "max_same_strain": 3,
+    "subset_diverse_to_size": 10000,
+    "do_upsample": "True",
+    "upsample_multiples": [
+        5,
+        5,
+        4,
+        4,
+        3,
+        3,
+        2,
+        2
+    ]
+}
