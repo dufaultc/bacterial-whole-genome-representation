@@ -190,8 +190,14 @@ def tokenize_gff(accession):
                     print(features[2], features[0], accession)
             elif features[2] == "sequence_feature":  #
                 try:
-                    tokens.append(attributes["Dbxref"])  #
+                    token = attributes["Dbxref"]
+                    if "RFAM" in token:
+                        token = token[:12]
+                        tokens.append(token)
+                    else:
+                        print(features[2], features[0], accession)
                 except:
+                    print("misc", features[2], features[0], accession)
                     tokens.append("misc")  #
             else:
                 print(features[2], features[0], accession)

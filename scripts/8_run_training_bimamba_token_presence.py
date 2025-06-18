@@ -1,5 +1,3 @@
-import datasets
-import tokenizers
 import os
 from src.utils import get_project_root
 from tokenizers import Tokenizer
@@ -7,20 +5,15 @@ from tokenizers.models import WordLevel
 from tokenizers.pre_tokenizers import WhitespaceSplit
 from tokenizers.processors import TemplateProcessing
 from transformers import PreTrainedTokenizerFast
-from datasets import load_from_disk
-from datasets import load_dataset, concatenate_datasets
-from datasets import disable_caching
+from datasets import load_dataset
 import transformers
-from transformers import MambaConfig, MambaForCausalLM
-from transformers import Trainer, TrainingArguments, TrainerCallback
+from transformers import TrainingArguments
 import torch
 import random
-import tqdm
 from collections import defaultdict
 from transformers import AutoConfig, AutoModelForMaskedLM
 from src.modeling_bimamba import (
     BiMambaForMaskedLMAndPresence,
-    BiMambaForMaskedLMAndSOP,
     BiMambaConfig,
 )
 from src.data_collator import (
@@ -28,10 +21,10 @@ from src.data_collator import (
     DataCollatorForPresence,
     DataCollatorForSOP,
 )
+from hf_mtask_trainer import HfMultiTaskTrainer
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
-from hf_mtask_trainer import HfMultiTaskTrainer
 
 # cache_dir = "/media/data/cameron/hf_cache"
 os.environ["WANDB_PROJECT"] = "bacterial-domain-learning"
@@ -89,7 +82,7 @@ smart_split = True
 smart_split_level = "genus"
 
 model_name = f"1000_genus_{model_type}_{run_date}_{train_date}_refseq_{same_rank_allowed_amount_train}_{unique_level}_split_{smart_split_level}_{hidden_size}_{num_hidden_layers}_{lr}_{num_epochs}"
-#model_name = f"{model_type}_{run_date}_{train_date}_refseq_{same_rank_allowed_amount_train}_{unique_level}_split_{smart_split_level}_{hidden_size}_{num_hidden_layers}_{lr}_{num_epochs}"
+# model_name = f"{model_type}_{run_date}_{train_date}_refseq_{same_rank_allowed_amount_train}_{unique_level}_split_{smart_split_level}_{hidden_size}_{num_hidden_layers}_{lr}_{num_epochs}"
 
 
 run_name = f"{assembly_source}_{num_assemblies if not all_assembles else 'all'}_{download_date}"
@@ -104,7 +97,7 @@ load_path = os.path.join(models_folder, load_model_name, "checkpoint-67016")
 vocab_path = os.path.join(
     tokenized_folder,
     f"1000_genus_{run_date}_vocab_{same_rank_allowed_amount_train}_{unique_level}_split_{smart_split_level}_count_vocab_cutoff_{count_vocab_cutoff}_occ_cutoff_{count_vocab_occ_cutoff}.json",
-    #f"{run_date}_vocab_{same_rank_allowed_amount_train}_{unique_level}_split_{smart_split_level}_count_vocab_cutoff_{count_vocab_cutoff}_occ_cutoff_{count_vocab_occ_cutoff}.json",
+    # f"{run_date}_vocab_{same_rank_allowed_amount_train}_{unique_level}_split_{smart_split_level}_count_vocab_cutoff_{count_vocab_cutoff}_occ_cutoff_{count_vocab_occ_cutoff}.json",
 )
 
 train_data_file = os.path.join(
@@ -146,7 +139,7 @@ print(len(tokenizer.vocab.keys()))
 
 config = BiMambaConfig(
     d_model=hidden_size,
-    n_layer=num_hidden_layers, 
+    n_layer=num_hidden_layers,
     pad_token_id=-100,
     bos_token_id=1,
     eos_token_id=2,
@@ -170,7 +163,7 @@ config = BiMambaConfig(
     truncated_one_hot=truncated_one_hot,
     gradient_accumulation_steps=gradient_accumulation_steps,
     load_path=load_path if load_saved else None,
-    #return_dict=False,
+    # return_dict=False,
 )
 model = BiMambaForMaskedLMAndPresence(config=config)
 if load_saved:
@@ -372,7 +365,7 @@ data_collator = DataCollatorForPresence(
 
 
 trainer = HfMultiTaskTrainer(
-    #trainer = Trainer(    
+    # trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=ds["train"],
