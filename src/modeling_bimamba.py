@@ -1,7 +1,6 @@
 # Adapted from https://huggingface.co/yairschiff/bimamba-template
 # Some changes to allow for multi task pretraining
-"""BiMamba model for Hugging Face.
-"""
+"""BiMamba model for Hugging Face."""
 
 import inspect
 import math
@@ -682,7 +681,7 @@ class BiMambaForMaskedLMAndPresence(BiMambaPreTrainedModel):
             self.presence_head = BiMambaForMaskedLMAndPresenceHeadSimpler(config)
         else:
             self.presence_head = BiMambaForMaskedLMAndPresenceHead(config)
-        if config.mlm_loss_share == 0:
+        if config.mlm_loss_multiplier == 0:
             self.lm_head = None
         else:
             self.lm_head = nn.Linear(
@@ -772,7 +771,7 @@ class BiMambaForMaskedLMAndPresence(BiMambaPreTrainedModel):
             one_hots = one_hots.float()
 
         logits = None
-        if self.config.mlm_loss_share == 0:
+        if self.config.mlm_loss_multiplier == 0:
             loss = bce_cross_entropy(
                 presence_scores,
                 one_hots,
@@ -800,8 +799,8 @@ class BiMambaForMaskedLMAndPresence(BiMambaPreTrainedModel):
                         ignore_index=self.config.pad_token_id,
                     )
                     loss = (
-                        self.config.mlm_loss_share * mlm_loss
-                        + self.config.presence_loss_share * presence_loss
+                        self.config.mlm_loss_multiplier * mlm_loss
+                        + self.config.presence_loss_multiplier * presence_loss
                     )
                     self.report_metrics(mlm_loss=mlm_loss, presence_loss=presence_loss)
         if not return_dict:
@@ -826,7 +825,7 @@ class BiMambaForMaskedLMAndPresenceOld(BiMambaPreTrainedModel):
             self.presence_head = BiMambaForMaskedLMAndPresenceHeadSimpler(config)
         else:
             self.presence_head = BiMambaForMaskedLMAndPresenceHead(config)
-        if config.mlm_loss_share == 0:
+        if config.mlm_loss_multiplier == 0:
             self.lm_head = None
         else:
             self.lm_head = nn.Linear(
@@ -916,7 +915,7 @@ class BiMambaForMaskedLMAndPresenceOld(BiMambaPreTrainedModel):
             one_hots = one_hots.float()
 
         logits = None
-        if self.config.mlm_loss_share == 0:
+        if self.config.mlm_loss_multiplier == 0:
             loss = bce_cross_entropy(
                 presence_scores,
                 one_hots,
@@ -943,9 +942,9 @@ class BiMambaForMaskedLMAndPresenceOld(BiMambaPreTrainedModel):
                     #     one_hots,
                     #     ignore_index=self.config.pad_token_id,
                     # )
-                    loss = self.config.mlm_loss_share * cross_entropy(
+                    loss = self.config.mlm_loss_multiplier * cross_entropy(
                         logits, labels, ignore_index=self.config.pad_token_id
-                    ) + self.config.presence_loss_share * bce_cross_entropy(
+                    ) + self.config.presence_loss_multiplier * bce_cross_entropy(
                         presence_scores, one_hots, ignore_index=self.config.pad_token_id
                     )
 

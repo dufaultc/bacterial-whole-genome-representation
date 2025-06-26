@@ -10,104 +10,78 @@ import transformers
 from transformers import TrainingArguments
 import torch
 import random
-from collections import defaultdict
-from transformers import AutoConfig, AutoModelForMaskedLM
 from src.modeling_bimamba import (
     BiMambaForMaskedLMAndPresence,
     BiMambaConfig,
 )
 from src.data_collator import (
-    DataCollatorForLanguageModeling,
     DataCollatorForPresence,
-    DataCollatorForSOP,
 )
 from hf_mtask_trainer import HfMultiTaskTrainer
+import json
+import sys
 
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
+print(sys.argv[1])
+with open(sys.argv[1]) as f:
+    args_dict = json.load(f)
 
-# cache_dir = "/media/data/cameron/hf_cache"
-os.environ["WANDB_PROJECT"] = "bacterial-domain-learning"
-os.environ["HF_DATASETS_CACHE"] = "/media/data/cameron/hf_cache"
 
-model_name_or_path = "yairschiff/bimamba-template"
+model_name = args_dict["model_name"]
+vocab_name = args_dict["vocab_name"]
+download_run_name = args_dict["download_run_name"]
+dataset_name = args_dict["dataset_name"]
+
+
+dataset_folder = os.path.join(
+    get_project_root(), "data", download_run_name, dataset_name
+)
+model_folder = os.path.join(dataset_folder, model_name)
+if not os.path.exists(model_folder):
+    os.makedirs(model_folder)
+
+os.environ["WANDB_PROJECT"] = args_dict["wandb_project"]
+os.environ["HF_DATASETS_CACHE"] = args_dict["hf_datasets_cache"]
+
 
 random.seed(1)
 
-train_date = "feb_5_multi_loss_less_punc"
-run_date = "oct_16"
-download_date = "aug_12"
-assembly_source = "RefSeq"
-all_assembles = True
-num_assemblies = None
-
-count_vocab_cutoff = 20
-count_vocab_occ_cutoff = 20
-
-max_length = 40000  # int(16384 * 2)
-cut_contig_start = 1
-cut_contig_end = 5
-cut_contig_length = 1000
-hidden_size = 768
-num_hidden_layers = 16
-mean_pool = True
-weight_decay = 0.1
-truncate_odds = 0.15
-random_truncation_level = True
-mlm_loss_share = 1.0
-presence_loss_share = 1.0
-mlm_probability = 0.15
-dropout_level = 0.20
-bidirectional_weight_tie = True
-simple_head = True
-truncated_one_hot = False
-
-num_epochs = 4
-lr = 4e-4
-gradient_accumulation_steps = 32
-
-model_type = "bimamba_presence"
-# model_type = "bimamba_absence"
-# model_type = "bimamba"
-
-# Should there be multiple genomes from same species/genus/family?
-# If so, how many?
-enforce_unique = True
-unique_level = "species"
-# How many genomes of same unique level should be included at most?
-same_rank_allowed_amount_train = "variable"
-# Split parameters
-smart_split = True
-# Split train and test data at what taxonomic rank?
-smart_split_level = "genus"
-
-model_name = f"1000_genus_{model_type}_{run_date}_{train_date}_refseq_{same_rank_allowed_amount_train}_{unique_level}_split_{smart_split_level}_{hidden_size}_{num_hidden_layers}_{lr}_{num_epochs}"
-# model_name = f"{model_type}_{run_date}_{train_date}_refseq_{same_rank_allowed_amount_train}_{unique_level}_split_{smart_split_level}_{hidden_size}_{num_hidden_layers}_{lr}_{num_epochs}"
+max_length = args_dict.get("max_length", 40000)
+truncate_odds = args_dict.get("truncate_odds", 0.85)
+cut_contig_start = args_dict.get("cut_contig_start", 1)
+cut_contig_end = args_dict.get("cut_contig_end", 5)
+cut_contig_length = args_dict.get("cut_contig_length", 5)
 
 
-run_name = f"{assembly_source}_{num_assemblies if not all_assembles else 'all'}_{download_date}"
-genomes_folder = os.path.join(get_project_root(), "data", run_name)
-models_folder = os.path.join(get_project_root(), "models")
-tokenized_folder = os.path.join(genomes_folder, "tokenized")
+hidden_size = args_dict.get("hidden_size", 768)
+num_hidden_layers = args_dict.get("num_hidden_layers", 16)
+mlm_loss_multiplier = args_dict.get("mlm_loss_multiplier", 1.0)
+presence_loss_multiplier = args_dict.get("presence_loss_multiplier", 1.0)
+mlm_probability = args_dict.get("mlm_probability", 0.15)
+dropout_level = args_dict.get("dropout_level", 0.2)
 
-load_saved = False
-load_model_name = f"1000_genus_{"bimamba_presence"}_{run_date}_{"dec_29_multi_loss"}_refseq_{same_rank_allowed_amount_train}_{unique_level}_split_{smart_split_level}_{hidden_size}_{num_hidden_layers}_{4e-4}_{4}"
-load_path = os.path.join(models_folder, load_model_name, "checkpoint-67016")
+weight_decay = args_dict.get("weight_decay", 16)
+num_epochs = args_dict.get("num_epochs", 4)
+lr = args_dict.get("lr", 4e-4)
+gradient_accumulation_steps = args_dict.get("gradient_accumulation_steps", 32)
+
+logging_steps = args_dict.get("logging_steps", 20)
+save_steps = args_dict.get("save_steps", 400)
+save_total_limit = args_dict.get("save_total_limit", 5)
+eval_steps = args_dict.get("eval_steps", 1500)
 
 vocab_path = os.path.join(
-    tokenized_folder,
-    f"1000_genus_{run_date}_vocab_{same_rank_allowed_amount_train}_{unique_level}_split_{smart_split_level}_count_vocab_cutoff_{count_vocab_cutoff}_occ_cutoff_{count_vocab_occ_cutoff}.json",
-    # f"{run_date}_vocab_{same_rank_allowed_amount_train}_{unique_level}_split_{smart_split_level}_count_vocab_cutoff_{count_vocab_cutoff}_occ_cutoff_{count_vocab_occ_cutoff}.json",
+    dataset_folder,
+    f"{vocab_name}_vocab.json",
 )
 
 train_data_file = os.path.join(
-    tokenized_folder,
-    f"{run_date}_train_{same_rank_allowed_amount_train}_{unique_level}_split_{smart_split_level}_new.csv",
+    dataset_folder,
+    f"train.csv",
 )
 
-test_data_file = os.path.join(
-    tokenized_folder,
-    f"{run_date}_val_{same_rank_allowed_amount_train}_{unique_level}_split_{smart_split_level}.csv",
+validation_data_file = os.path.join(
+    dataset_folder,
+    f"validation.csv",
 )
 
 
@@ -134,7 +108,6 @@ tokenizer = PreTrainedTokenizerFast(
     unk_token="[UNK]",
     model_input_names=["input_ids"],
 )
-print(len(tokenizer.vocab.keys()))
 
 
 config = BiMambaConfig(
@@ -151,41 +124,27 @@ config = BiMambaConfig(
     cut_contig_start=cut_contig_start,
     cut_contig_end=cut_contig_end,
     cut_contig_length=cut_contig_length,
-    mean_pool=mean_pool,
+    mean_pool=True,
     truncate_odds=truncate_odds,
-    mlm_loss_share=mlm_loss_share,
-    presence_loss_share=presence_loss_share,
-    random_truncation_level=random_truncation_level,
+    mlm_loss_multiplier=mlm_loss_multiplier,
+    presence_loss_multiplier=presence_loss_multiplier,
+    random_truncation_level=True,
     dropout_level=dropout_level,
-    bidirectional_weight_tie=bidirectional_weight_tie,
-    simple_head=simple_head,
+    bidirectional_weight_tie=True,
+    simple_head=True,
     mlm_probability=mlm_probability,
-    truncated_one_hot=truncated_one_hot,
+    truncated_one_hot=False,
     gradient_accumulation_steps=gradient_accumulation_steps,
-    load_path=load_path if load_saved else None,
-    # return_dict=False,
 )
 model = BiMambaForMaskedLMAndPresence(config=config)
-if load_saved:
-    model.load_state_dict(
-        torch.load(load_path + "/pytorch_model.bin", weights_only=True), strict=False
-    )
-print(sum(p.numel() for p in model.parameters()))
 
 
 ds = load_dataset(
-    "csv", data_files={"train": train_data_file, "validation": test_data_file}
+    "csv", data_files={"train": train_data_file, "validation": validation_data_file}
 )
 
-# ds["train"] = ds["train"].select(list(range(10000)))
-
-
-def tokenize_function(examples):
-    return tokenizer(examples["sequence"])
-
-
 dataset = ds.map(
-    tokenize_function,
+    lambda x: tokenizer(x["sequence"]),
     batched=False,
     num_proc=32,
     remove_columns=["sequence"],
@@ -199,20 +158,20 @@ def shuffle_contigs(examples):
         sublists_input_ids = []
         current_sublist_input_ids = []
 
-        for j, item in enumerate(examples["input_ids"][i][1:-1]):
-            if item == vocab["contig_start"]:
+        for j, token in enumerate(examples["input_ids"][i][1:-1]):
+            if token == vocab["contig_start"]:
                 if current_sublist_input_ids:
                     sublists_input_ids.append(current_sublist_input_ids)
                 current_sublist_input_ids = [vocab["contig_start"]]
             else:
-                current_sublist_input_ids.append(item)
+                current_sublist_input_ids.append(token)
 
         if current_sublist_input_ids:
             sublists_input_ids.append(current_sublist_input_ids)
 
         new_sublists_input_ids = []
         old_sublists_input_ids = sublists_input_ids
-        # for i in range(random.randint(1, 5)):
+
         for i in range(random.randint(cut_contig_start, cut_contig_end)):
             new_sublists_input_ids = []
             for sublist in old_sublists_input_ids:
@@ -251,13 +210,9 @@ def shuffle_contigs(examples):
 def truncate_randomly(examples):
     results = {"input_ids": []}
     for i in range(len(examples["input_ids"])):
-        if random.random() > truncate_odds:
+        if random.random() > 1 - truncate_odds:
             length = len(examples["input_ids"][i])
-            if random_truncation_level:
-                # half_length = round(length * random.uniform(0.4, 0.6))
-                half_length = round(length * random.uniform(0.4, 0.6))
-            else:
-                half_length = length // 2
+            half_length = round(length * random.uniform(0.4, 0.6))
             start_index = random.randint(1, length - half_length - 1)
             results["input_ids"].append(
                 [1]
@@ -271,6 +226,18 @@ def truncate_randomly(examples):
                 )
             else:
                 results["input_ids"].append(examples["input_ids"][i])
+    return results
+
+
+def one_hot_function(examples):
+    results = {"one_hots": []}
+    for i in range(len(examples["input_ids"])):
+        one_hot_dict = {j: 0 for j in range(len(vocab.keys()))}
+        ids = set(examples["input_ids"][i])
+        for key in one_hot_dict.keys():
+            if key in ids:
+                one_hot_dict[key] = 1
+        results["one_hots"].append(list(one_hot_dict.values()))
     return results
 
 
@@ -292,18 +259,6 @@ ds["validation"] = ds["validation"].map(
 print(ds)
 
 
-def one_hot_function(examples):
-    results = {"one_hots": []}
-    for i in range(len(examples["input_ids"])):
-        one_hot_dict = {j: 0 for j in range(len(vocab.keys()))}
-        ids = set(examples["input_ids"][i])
-        for key in one_hot_dict.keys():
-            if key in ids:
-                one_hot_dict[key] = 1
-        results["one_hots"].append(list(one_hot_dict.values()))
-    return results
-
-
 ds = ds.map(one_hot_function, batched=True, num_proc=16)
 ds["train"] = ds["train"].map(
     truncate_randomly,
@@ -317,7 +272,6 @@ ds["validation"] = ds["validation"].map(
     batch_size=20,
     num_proc=16,
 )
-# ds["train"] = ds["train"].select(list(range(100000)))
 
 ds = ds.remove_columns(
     [x for x in ds["train"].features.keys() if x not in ["one_hots", "input_ids"]]
@@ -325,18 +279,18 @@ ds = ds.remove_columns(
 print(ds)
 
 training_args = TrainingArguments(
-    output_dir=f"{models_folder}/{model_name}",
+    output_dir=model_folder,
     run_name=model_name,
     overwrite_output_dir=True,
     do_train=True,
     do_eval=True,
-    evaluation_strategy="steps",
+    eval_strategy="steps",
     per_device_train_batch_size=1,
     per_device_eval_batch_size=2,
-    logging_steps=20,
-    save_steps=400,
-    save_total_limit=5,
-    eval_steps=1500,
+    logging_steps=logging_steps,
+    save_steps=save_steps,
+    save_total_limit=save_total_limit,
+    eval_steps=eval_steps,
     push_to_hub=False,
     num_train_epochs=num_epochs,
     report_to="wandb",
@@ -365,7 +319,6 @@ data_collator = DataCollatorForPresence(
 
 
 trainer = HfMultiTaskTrainer(
-    # trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=ds["train"],
@@ -374,10 +327,4 @@ trainer = HfMultiTaskTrainer(
     callbacks=[transformers.integrations.WandbCallback],
 )
 
-
-# if load_saved:
-#     trainer.train(
-#         resume_from_checkpoint=load_path,
-#     )
-# else:
 trainer.train()

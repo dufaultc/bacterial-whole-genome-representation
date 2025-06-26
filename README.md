@@ -9,12 +9,13 @@ Paper: https://www.biorxiv.org/content/10.1101/2025.04.01.646674v1
 This repo is a work in progress, expect more/better/cleaner code to be added in coming weeks.
 
 Current main things missing are:
-* Proper instructions for tuning parameters of dataset generation
-* Nice code for running model training and instructions
 * Downloadable pretrained models
 * Code for running KNN evluations and instructions for getting data from BacDive
 
+
 ## Creating environment
+
+The below commands were run to set up
 
 * `conda create -n "bacterial_env" python=3.12.2` activate
 * `pip install -e .`
@@ -24,6 +25,13 @@ Current main things missing are:
 * `conda install conda-forge::tqdm`
 * `pip install pyhmmer=0.11.0`
 * `conda install bioconda::taxopy`
+* `conda install anaconda::scikit-learn`
+* `conda install pytorch  pytorch-cuda=12.1 -c pytorch -c nvidia`
+* `conda install conda-forge::transformers`
+* `pip install hf-mtask-trainer`
+* `conda install conda-forge::wandb`
+* `pip install mamba-ssm==2.2.2`
+* `pip install causal-conv1d==1.4.0`
 
 ## Building dataset
 * `python ./scripts/1_download_data.py`
@@ -33,7 +41,7 @@ Current main things missing are:
 * `python ./scripts/4_create_proteins_dict.py`
 * `python ./scripts/5_run_gff_tokenization.py`
 * `python ./scripts/6_filter_split_dataset.py`
-* `python ./scripts/7_find_vocab_diverse.py`
+* `python ./scripts/7_find_vocab.py`
 
 ## Running training
 

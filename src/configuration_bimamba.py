@@ -1,7 +1,6 @@
 # Adapted from https://huggingface.co/yairschiff/bimamba-template
 # Some changes to allow for multi task pretraining
-"""Caduceus config for Hugging Face.
-"""
+"""Caduceus config for Hugging Face."""
 
 from typing import Optional, Union
 
@@ -33,8 +32,8 @@ class BiMambaConfig(PretrainedConfig):
         bidirectional_strategy: Union[str, None] = "add",
         bidirectional_weight_tie: bool = True,
         mean_pool: bool = True,
-        mlm_loss_share: float = 1.0,
-        presence_loss_share: float = 1.0,
+        mlm_loss_multiplier: float = 1.0,
+        presence_loss_multiplier: float = 1.0,
         random_truncation_level: bool = True,
         dropout_level: float = 0.4,
         simple_head: bool = True,
@@ -55,8 +54,8 @@ class BiMambaConfig(PretrainedConfig):
         self.bidirectional_strategy = bidirectional_strategy
         self.bidirectional_weight_tie = bidirectional_weight_tie
         self.mean_pool = mean_pool
-        self.mlm_loss_share = mlm_loss_share
-        self.presence_loss_share = presence_loss_share
+        self.mlm_loss_multiplier = mlm_loss_multiplier
+        self.presence_loss_multiplier = presence_loss_multiplier
         self.random_truncation_level = random_truncation_level
         self.dropout_level = dropout_level
         self.simple_head = simple_head
